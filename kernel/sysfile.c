@@ -503,3 +503,42 @@ sys_pipe(void)
   }
   return 0;
 }
+
+// mmap system call
+uint64
+sys_mmap(void)
+{
+  uint64 addr;
+  int length, prot, flags, fd;
+  int offset;
+
+  if(argaddr(0, &addr) < 0)
+    return (uint64)-1;
+  if(argint(1, &length) < 0)
+    return (uint64)-1;
+  if(argint(2, &prot) < 0)
+    return (uint64)-1;
+  if(argint(3, &flags) < 0)
+    return (uint64)-1;
+  if(argint(4, &fd) < 0)
+    return (uint64)-1;
+  if(argint(5, &offset) < 0)
+    return (uint64)-1;
+
+  return (uint64) do_mmap(addr, (uint64)length, prot, flags, fd, (uint64)offset);
+}
+
+// munmap system call
+uint64
+sys_munmap(void)
+{
+  uint64 addr;
+  int length;
+
+  if(argaddr(0, &addr) < 0)
+    return -1;
+  if(argint(1, &length) < 0)
+    return -1;
+
+  return do_munmap(addr, (uint64)length);
+}

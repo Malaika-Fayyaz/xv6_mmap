@@ -1,3 +1,5 @@
+#ifndef PROC_H
+#define PROC_H
 // Saved registers for kernel context switches.
 struct context {
   uint64 ra;
@@ -81,6 +83,19 @@ struct trapframe {
 
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
+#define MAX_MMAP_AREAS 16     // per-process limit for memory-mapped regions
+
+// Memory-mapped area structure
+struct mmap_area {
+  uint64 va_start;   // page-aligned virtual start address
+  uint64 length;     // size in bytes (rounded up to pages)
+  struct file *f;    // file pointer (kernel file struct)
+  uint64 file_offset;// offset in file corresponding to va_start
+  int prot;          // PROT_READ | PROT_WRITE
+  int flags;         // MAP_SHARED | MAP_PRIVATE
+  int used;          // 0 = free, 1 = used
+};
+
 // Per-process state
 struct proc {
   struct spinlock lock;
@@ -104,4 +119,10 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+  
+  // Memory-mapped regions
+  struct mmap_area mmap_areas[MAX_MMAP_AREAS];
+  uint64 mmap_hint;            // optional: next free VA hint
 };
+
+#endif // PROC_H

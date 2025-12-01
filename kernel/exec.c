@@ -7,16 +7,40 @@
 #include "defs.h"
 #include "elf.h"
 
+// forward
 static int loadseg(pde_t *, uint64, struct inode *, uint, uint);
 
 // map ELF permissions to PTE permission bits.
-int flags2perm(int flags)
+int
+flags2perm(int flags)
 {
     int perm = 0;
-    if(flags & 0x1)
-      perm = PTE_X;
-    if(flags & 0x2)
-      perm |= PTE_W;
+
+    // ELF program header flags commonly use PF_X=1, PF_W=2, PF_R=4.
+    // Some trees define PF_X/PF_W/PF_R in elf.h; if present prefer them.
+#ifdef PF_X
+    if (flags & PF_X) perm |= PTE_X;
+#else
+    if (flags & 0x1) perm |= PTE_X;
+#endif
+
+#ifdef PF_W
+    if (flags & PF_W) perm |= PTE_W;
+#else
+    if (flags & 0x2) perm |= PTE_W;
+#endif
+
+#ifdef PF_R
+    if (flags & PF_R) perm |= PTE_R;
+#else
+    if (flags & 0x4) perm |= PTE_R;
+#endif
+
+    // Ensure user bit is present for user mappings
+#ifdef PTE_U
+    perm |= PTE_U;
+#endif
+
     return perm;
 }
 
@@ -81,12 +105,42 @@ kexec(char *path, char **argv)
   p = myproc();
   uint64 oldsz = p->sz;
 
+  // Clean up all mmap areas before loading new program.
+  // Use do_munmap (which centralizes unmap + writeback/close) if available;
+  // fallback to uvmunmap if do_munmap isn't implemented.
+  for(int i = 0; i < MAX_MMAP_AREAS; i++) {
+    if(p->mmap_areas[i].used) {
+      struct mmap_area *m = &p->mmap_areas[i];
+      // prefer do_munmap to ensure write-back semantics are honored
+      if (do_munmap(m->va_start, m->length) < 0) {
+        // if do_munmap for some reason fails, try uvmunmap to at least free pages
+        int npages = m->length / PGSIZE;
+        uvmunmap(p->pagetable, m->va_start, npages, 1);
+        if (m->f) fileclose(m->f);
+        m->used = 0;
+      }
+      // do_munmap should close the file and mark used=0; ensure state cleared
+      m->used = 0;
+    }
+  }
+  p->mmap_hint = 0;
+
   // Allocate some pages at the next page boundary.
   // Make the first inaccessible as a stack guard.
   // Use the rest as the user stack.
   sz = PGROUNDUP(sz);
   uint64 sz1;
-  if((sz1 = uvmalloc(pagetable, sz, sz + (USERSTACK+1)*PGSIZE, PTE_W)) == 0)
+  // Ensure stack pages have read/write/user permissions.
+#ifdef PTE_R
+  int stackperm = PTE_R|PTE_W;
+#else
+  int stackperm = PTE_W;
+#endif
+#ifdef PTE_U
+  stackperm |= PTE_U;
+#endif
+
+  if((sz1 = uvmalloc(pagetable, sz, sz + (USERSTACK+1)*PGSIZE, stackperm)) == 0)
     goto bad;
   sz = sz1;
   uvmclear(pagetable, sz-(USERSTACK+1)*PGSIZE);

@@ -30,42 +30,57 @@ fetchstr(uint64 addr, char *buf, int max)
   return strlen(buf);
 }
 
-static uint64
-argraw(int n)
-{
-  struct proc *p = myproc();
-  switch (n) {
-  case 0:
-    return p->trapframe->a0;
-  case 1:
-    return p->trapframe->a1;
-  case 2:
-    return p->trapframe->a2;
-  case 3:
-    return p->trapframe->a3;
-  case 4:
-    return p->trapframe->a4;
-  case 5:
-    return p->trapframe->a5;
-  }
-  panic("argraw");
-  return -1;
-}
+// static uint64 argraw(int n)
+// {
+//   struct proc *p = myproc();
+//   switch (n) {
+//   case 0:
+//     return p->trapframe->a0;
+//   case 1:
+//     return p->trapframe->a1;
+//   case 2:
+//     return p->trapframe->a2;
+//   case 3:
+//     return p->trapframe->a3;
+//   case 4:
+//     return p->trapframe->a4;
+//   case 5:
+//     return p->trapframe->a5;
+//   }
+//   panic("argraw");
+//   return -1;
+// }
 
 // Fetch the nth 32-bit system call argument.
-void
-argint(int n, int *ip)
+int argint(int n, int *ip)
 {
-  *ip = argraw(n);
+    struct proc *p = myproc();
+    switch(n) {
+    case 0: *ip = p->trapframe->a0; break;
+    case 1: *ip = p->trapframe->a1; break;
+    case 2: *ip = p->trapframe->a2; break;
+    case 3: *ip = p->trapframe->a3; break;
+    case 4: *ip = p->trapframe->a4; break;
+    case 5: *ip = p->trapframe->a5; break;
+    default: return -1;
+    }
+    return 0;
 }
 
-// Retrieve an argument as a pointer.
-// Doesn't check for legality, since
-// copyin/copyout will do that.
-void
-argaddr(int n, uint64 *ip)
+// Fetch the nth 64-bit system call argument (used for pointers / addresses)
+int argaddr(int n, uint64 *ip)
 {
-  *ip = argraw(n);
+    struct proc *p = myproc();
+    switch(n) {
+    case 0: *ip = p->trapframe->a0; break;
+    case 1: *ip = p->trapframe->a1; break;
+    case 2: *ip = p->trapframe->a2; break;
+    case 3: *ip = p->trapframe->a3; break;
+    case 4: *ip = p->trapframe->a4; break;
+    case 5: *ip = p->trapframe->a5; break;
+    default: return -1;
+    }
+    return 0;
 }
 
 // Fetch the nth word-sized system call argument as a null-terminated string.
@@ -101,6 +116,8 @@ extern uint64 sys_unlink(void);
 extern uint64 sys_link(void);
 extern uint64 sys_mkdir(void);
 extern uint64 sys_close(void);
+extern uint64 sys_mmap(void);
+extern uint64 sys_munmap(void);
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -126,6 +143,8 @@ static uint64 (*syscalls[])(void) = {
 [SYS_link]    sys_link,
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
+[SYS_mmap]    sys_mmap,
+[SYS_munmap]  sys_munmap,
 };
 
 void

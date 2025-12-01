@@ -140,6 +140,12 @@ found:
     return 0;
   }
 
+  // Initialize mmap areas
+  for(int i = 0; i < MAX_MMAP_AREAS; i++) {
+    p->mmap_areas[i].used = 0;
+  }
+  p->mmap_hint = 0;
+
   // Set up new context to start executing at forkret,
   // which returns to user space.
   memset(&p->context, 0, sizeof(p->context));
@@ -169,6 +175,12 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  // mmap areas should already be cleaned up in exit/exec
+  // but ensure they're cleared here too
+  for(int i = 0; i < MAX_MMAP_AREAS; i++) {
+    p->mmap_areas[i].used = 0;
+  }
+  p->mmap_hint = 0;
 }
 
 // Create a user page table for a given process, with no user memory,
@@ -288,6 +300,18 @@ kfork(void)
       np->ofile[i] = filedup(p->ofile[i]);
   np->cwd = idup(p->cwd);
 
+  // Copy mmap areas (child inherits mappings, but pages remain lazy)
+  for(i = 0; i < MAX_MMAP_AREAS; i++) {
+    if(p->mmap_areas[i].used) {
+      np->mmap_areas[i] = p->mmap_areas[i];
+      // Increment file reference count
+      filedup(p->mmap_areas[i].f);
+    } else {
+      np->mmap_areas[i].used = 0;
+    }
+  }
+  np->mmap_hint = p->mmap_hint;
+
   safestrcpy(np->name, p->name, sizeof(p->name));
 
   pid = np->pid;
@@ -337,6 +361,25 @@ kexit(int status)
       struct file *f = p->ofile[fd];
       fileclose(f);
       p->ofile[fd] = 0;
+    }
+  }
+
+  // Clean up mmap areas
+  for(int i = 0; i < MAX_MMAP_AREAS; i++) {
+    if(p->mmap_areas[i].used) {
+      // Unmap all pages in this VMA
+      struct mmap_area *m = &p->mmap_areas[i];
+      for(uint64 a = m->va_start; a < m->va_start + m->length; a += PGSIZE) {
+        pte_t *pte = walk(p->pagetable, a, 0);
+        if(pte && (*pte & PTE_V)) {
+          uint64 pa = PTE2PA(*pte);
+          *pte = 0;
+          kfree((void*)pa);
+        }
+      }
+      // Close file reference
+      fileclose(m->f);
+      m->used = 0;
     }
   }
 
@@ -531,7 +574,6 @@ forkret(void)
   }
 
   // return to user space, mimicing usertrap()'s return.
-  prepare_return();
   uint64 satp = MAKE_SATP(p->pagetable);
   uint64 trampoline_userret = TRAMPOLINE + (userret - trampoline);
   ((void (*)(uint64))trampoline_userret)(satp);

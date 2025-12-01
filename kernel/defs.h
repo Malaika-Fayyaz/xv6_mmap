@@ -129,9 +129,9 @@ int             strncmp(const char*, const char*, uint);
 char*           strncpy(char*, const char*, int);
 
 // syscall.c
-void            argint(int, int*);
+int            argint(int, int*);
 int             argstr(int, char*, int);
-void            argaddr(int, uint64 *);
+int            argaddr(int, uint64 *);
 int             fetchstr(uint64, char*, int);
 int             fetchaddr(uint64, uint64*);
 void            syscall();
@@ -169,6 +169,9 @@ int             copyin(pagetable_t, char *, uint64, uint64);
 int             copyinstr(pagetable_t, char *, uint64, uint64);
 int             ismapped(pagetable_t, uint64);
 uint64          vmfault(pagetable_t, uint64, int);
+uint64          do_mmap(uint64, uint64, int, int, int, uint64);
+int             do_munmap(uint64, uint64);
+int             handle_mmap_fault(uint64);
 
 // plic.c
 void            plicinit(void);
@@ -180,6 +183,11 @@ void            plic_complete(int);
 void            virtio_disk_init(void);
 void            virtio_disk_rw(struct buf *, int);
 void            virtio_disk_intr(void);
+
+// vm.c
+void            uvmclear(pagetable_t, uint64);
+int             uvmcopy(pagetable_t, pagetable_t, uint64);
+void            prepare_return(void);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
